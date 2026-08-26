@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420" role="img" aria-label="sshm interactive connection list">
+  <!-- window -->
+  <rect x="0.5" y="0.5" width="759" height="419" rx="14" fill="#1A1A24" stroke="#2E2E3C"/>
+  <!-- title bar -->
+  <circle cx="26" cy="24" r="6" fill="#FF5F57"/>
+  <circle cx="48" cy="24" r="6" fill="#FEBC2E"/>
+  <circle cx="70" cy="24" r="6" fill="#28C840"/>
+  <text x="380" y="28" text-anchor="middle" font-family="ui-sans-serif, -apple-system, Helvetica, sans-serif" font-size="12" fill="#6C6B7A">sshm — connection manager</text>
+  <line x1="24" y1="48" x2="736" y2="48" stroke="#2E2E3C"/>
+
+  <g font-family="ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace" font-size="14">
+    <!-- header chip -->
+    <rect x="24" y="64" width="86" height="26" rx="7" fill="#B69EFF"/>
+    <text x="36" y="82" fill="#161620" font-weight="700">⚡ sshm</text>
+
+    <!-- selected row background + accent bar -->
+    <rect x="16" y="104" width="728" height="44" rx="8" fill="#232135"/>
+    <rect x="24" y="108" width="4" height="36" rx="2" fill="#B69EFF"/>
+
+    <!-- row 0 (selected) -->
+    <text x="44" y="122" fill="#B69EFF" font-weight="700">prod-web</text>
+    <rect x="360" y="106" width="104" height="22" rx="7" fill="#2A2340"/>
+    <text x="372" y="121" fill="#B69EFF" font-weight="600">production</text>
+    <text x="44" y="142" fill="#9B9AA6">root@203.0.113.10</text>
+    <text x="360" y="142" fill="#5C5B66">a1b2c3d4</text>
+
+    <!-- row 1 -->
+    <text x="44" y="174" fill="#EAEAEA" font-weight="600">prod-db</text>
+    <rect x="360" y="158" width="104" height="22" rx="7" fill="#2A2340"/>
+    <text x="372" y="173" fill="#B69EFF" font-weight="600">production</text>
+    <text x="44" y="194" fill="#9B9AA6">root@203.0.113.11</text>
+    <text x="360" y="194" fill="#5C5B66">e5f6a7b8</text>
+
+    <!-- row 2 -->
+    <text x="44" y="226" fill="#EAEAEA" font-weight="600">staging-1</text>
+    <rect x="360" y="210" width="78" height="22" rx="7" fill="#2A2340"/>
+    <text x="372" y="225" fill="#B69EFF" font-weight="600">staging</text>
+    <text x="44" y="246" fill="#9B9AA6">deploy@198.51.100.20</text>
+    <text x="360" y="246" fill="#5C5B66">c9d0e1f2</text>
+
+    <!-- row 3 -->
+    <text x="44" y="278" fill="#EAEAEA" font-weight="600">pi-garden</text>
+    <rect x="360" y="262" width="56" height="22" rx="7" fill="#2A2340"/>
+    <text x="372" y="277" fill="#B69EFF" font-weight="600">home</text>
+    <text x="44" y="298" fill="#9B9AA6">pi@192.168.1.42</text>
+    <text x="360" y="298" fill="#5C5B66">34a5b6c7</text>
+
+    <!-- row 4 -->
+    <text x="44" y="330" fill="#EAEAEA" font-weight="600">bastion</text>
+    <rect x="360" y="314" width="62" height="22" rx="7" fill="#2A2340"/>
+    <text x="372" y="329" fill="#B69EFF" font-weight="600">infra</text>
+    <text x="44" y="350" fill="#9B9AA6">admin@bastion.example:2222</text>
+    <text x="360" y="350" fill="#5C5B66">d8e9f0a1</text>
+
+    <!-- footer -->
+    <line x1="24" y1="374" x2="736" y2="374" stroke="#2E2E3C"/>
+    <text x="24" y="399" font-size="12.5" fill="#5C5B66" xml:space="preserve"><tspan fill="#9B9AA6" font-weight="600">↑/↓</tspan> move  <tspan fill="#9B9AA6" font-weight="600">enter</tspan> connect  <tspan fill="#9B9AA6" font-weight="600">a</tspan> add  <tspan fill="#9B9AA6" font-weight="600">e</tspan> edit  <tspan fill="#9B9AA6" font-weight="600">d</tspan> delete  <tspan fill="#9B9AA6" font-weight="600">i</tspan> import  <tspan fill="#9B9AA6" font-weight="600">/</tspan> filter  <tspan fill="#9B9AA6" font-weight="600">q</tspan> quit</text>
+  </g>
+</svg>
