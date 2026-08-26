@@ -1,0 +1,5 @@
+# Compiled binary (built with `go build -o sshm .`)
+/sshm
+
+# macOS
+.DS_Store

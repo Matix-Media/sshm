@@ -1,0 +1,448 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import shlex
+import subprocess
+import glob
+import uuid
+import time
+from datetime import datetime
+
+CONFIG_DIR = os.path.expanduser("~/.config/sshm")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "connections.json")
+
+def init_db():
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+    if not os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "w") as f:
+            json.dump([], f, indent=4)
+
+def load_connections():
+    init_db()
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_connections(connections):
+    init_db()
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(connections, f, indent=4)
+
+def parse_ssh_config_file(filepath, seen_files=None):
+    if seen_files is None:
+        seen_files = set()
+    
+    filepath = os.path.expanduser(filepath)
+    if not os.path.exists(filepath) or filepath in seen_files:
+        return []
+    
+    seen_files.add(filepath)
+    connections = []
+    current_host = None
+    
+    try:
+        with open(filepath, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                # Handle Include directive
+                if line.lower().startswith("include "):
+                    parts = shlex.split(line)
+                    if len(parts) > 1:
+                        include_pattern = parts[1]
+                        include_pattern = os.path.expanduser(include_pattern)
+                        for included_path in glob.glob(include_pattern):
+                            connections.extend(parse_ssh_config_file(included_path, seen_files))
+                    continue
+                
+                parts = shlex.split(line)
+                if not parts:
+                    continue
+                
+                key = parts[0].lower()
+                value = " ".join(parts[1:])
+                
+                if key == "host":
+                    # Host line could define multiple names separated by space
+                    hosts = parts[1:]
+                    for h in hosts:
+                        if "*" in h or "?" in h:
+                            current_host = None  # Skip wildcard configs
+                            continue
+                        current_host = {
+                            "id": str(uuid.uuid4())[:8],
+                            "name": h,
+                            "host": "",
+                            "user": "",
+                            "port": "22",
+                            "identity_file": "",
+                            "group": "imported",
+                            "notes": f"Imported from {filepath}",
+                            "custom_command": ""
+                        }
+                        connections.append(current_host)
+                elif current_host:
+                    if key == "hostname":
+                        current_host["host"] = value
+                    elif key == "user":
+                        current_host["user"] = value
+                    elif key == "port":
+                        current_host["port"] = value
+                    elif key == "identityfile":
+                        current_host["identity_file"] = os.path.expanduser(value)
+    except Exception:
+        pass
+        
+    return [c for c in connections if c.get("host")]
+
+def scan_ssh_config():
+    connections = parse_ssh_config_file("~/.ssh/config")
+    existing = load_connections()
+    existing_hosts = {c.get("name").lower() for c in existing}
+    
+    added_count = 0
+    for conn in connections:
+        if conn["name"].lower() not in existing_hosts:
+            existing.append(conn)
+            added_count += 1
+            
+    if added_count > 0:
+        save_connections(existing)
+    return added_count
+
+def get_input(prompt, default=""):
+    try:
+        default_str = f" [{default}]" if default else ""
+        val = input(f"\033[1;36m{prompt}{default_str}:\033[0m ").strip()
+        return val if val else default
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperation cancelled.")
+        return None
+
+def clear_term():
+    print("\033[H\033[J", end="")
+
+def add_connection_prompt():
+    clear_term()
+    print("⚡ \033[1;33mAdd New SSH Connection\033[0m ⚡\n")
+    
+    name = get_input("Connection Name (e.g. My Server)")
+    if not name: return
+    
+    host = get_input("Host IP or Domain")
+    if not host: return
+    
+    user = get_input("SSH User", default="root")
+    if user is None: return
+    
+    port = get_input("SSH Port", default="22")
+    if port is None: return
+    
+    identity_file = get_input("Identity File (Private Key Path, e.g. ~/.ssh/id_ed25519) [Optional]", default="")
+    if identity_file is None: return
+    if identity_file:
+        identity_file = os.path.expanduser(identity_file)
+        
+    custom_command = get_input("Custom Connection Command (ignores other fields if set) [Optional]", default="")
+    if custom_command is None: return
+    
+    group = get_input("Group/Tag (e.g. production, staging) [Optional]", default="default")
+    if group is None: return
+    
+    notes = get_input("Notes [Optional]", default="")
+    if notes is None: return
+    
+    new_conn = {
+        "id": str(uuid.uuid4())[:8],
+        "name": name,
+        "host": host,
+        "user": user,
+        "port": port,
+        "identity_file": identity_file,
+        "custom_command": custom_command,
+        "group": group,
+        "notes": notes
+    }
+    
+    conns = load_connections()
+    conns.append(new_conn)
+    save_connections(conns)
+    print("\n\033[1;32mConnection added successfully!\033[0m")
+    time.sleep(1)
+
+def edit_connection_prompt(conn_id):
+    clear_term()
+    conns = load_connections()
+    conn = next((c for c in conns if c["id"] == conn_id), None)
+    if not conn:
+        print("Error: Connection not found.")
+        return
+        
+    print(f"⚡ \033[1;33mEdit SSH Connection: {conn.get('name')}\033[0m ⚡\n")
+    
+    name = get_input("Connection Name", default=conn.get("name", ""))
+    if not name: return
+    
+    host = get_input("Host IP or Domain", default=conn.get("host", ""))
+    if not host: return
+    
+    user = get_input("SSH User", default=conn.get("user", "root"))
+    if user is None: return
+    
+    port = get_input("SSH Port", default=conn.get("port", "22"))
+    if port is None: return
+    
+    identity_file = get_input("Identity File Path [Optional]", default=conn.get("identity_file", ""))
+    if identity_file is None: return
+    if identity_file:
+        identity_file = os.path.expanduser(identity_file)
+        
+    custom_command = get_input("Custom Command [Optional]", default=conn.get("custom_command", ""))
+    if custom_command is None: return
+    
+    group = get_input("Group/Tag [Optional]", default=conn.get("group", "default"))
+    if group is None: return
+    
+    notes = get_input("Notes [Optional]", default=conn.get("notes", ""))
+    if notes is None: return
+    
+    conn["name"] = name
+    conn["host"] = host
+    conn["user"] = user
+    conn["port"] = port
+    conn["identity_file"] = identity_file
+    conn["custom_command"] = custom_command
+    conn["group"] = group
+    conn["notes"] = notes
+    
+    save_connections(conns)
+    print("\n\033[1;32mConnection updated successfully!\033[0m")
+    time.sleep(1)
+
+def delete_connection(conn_id):
+    clear_term()
+    conns = load_connections()
+    conn = next((c for c in conns if c["id"] == conn_id), None)
+    if not conn:
+        return
+        
+    print(f"⚡ \033[1;31mDelete SSH Connection\033[0m ⚡\n")
+    confirm = input(f"Are you sure you want to delete '\033[1;33m{conn.get('name')}\033[0m'? (y/N): ").strip().lower()
+    if confirm == 'y':
+        conns = [c for c in conns if c["id"] != conn_id]
+        save_connections(conns)
+        print("\n\033[1;32mConnection deleted.\033[0m")
+    else:
+        print("\nCancelled.")
+    time.sleep(1)
+
+def import_config_prompt():
+    clear_term()
+    print("⚡ \033[1;33mImport SSH Configurations\033[0m ⚡\n")
+    print("This will scan standard ~/.ssh/config files (and Included configs) for connection profiles.")
+    confirm = input("Scan and import new profiles? (Y/n): ").strip().lower()
+    if confirm != 'n':
+        added = scan_ssh_config()
+        print(f"\n\033[1;32mSuccessfully imported {added} new SSH profiles!\033[0m")
+    else:
+        print("\nCancelled.")
+    time.sleep(1.5)
+
+def connect_ssh(conn_id):
+    conns = load_connections()
+    conn = next((c for c in conns if c["id"] == conn_id), None)
+    if not conn:
+        print("Error: Connection profile not found.")
+        sys.exit(1)
+        
+    clear_term()
+    print(f"\033[1;32mConnecting to \033[1;33m{conn.get('name')}\033[0;32m ({conn.get('user')}@{conn.get('host')}:{conn.get('port', '22')})...\033[0m\n")
+    
+    if conn.get("custom_command"):
+        cmd_args = shlex.split(conn.get("custom_command"))
+        os.execvp(cmd_args[0], cmd_args)
+    else:
+        ssh_args = ["ssh"]
+        if conn.get("port") and conn.get("port") != "22":
+            ssh_args.extend(["-p", conn.get("port")])
+        if conn.get("identity_file"):
+            ssh_args.extend(["-i", os.path.expanduser(conn.get("identity_file"))])
+        ssh_args.append(f"{conn.get('user')}@{conn.get('host')}")
+        os.execvp("ssh", ssh_args)
+
+def run_ui():
+    connections = load_connections()
+    connections.sort(key=lambda x: (x.get("group", ""), x.get("name", "").lower()))
+    
+    if not connections:
+        clear_term()
+        print("⚡ \033[1;36mSSH Manager\033[0m ⚡\n")
+        print("No connections saved yet.")
+        print("\n  \033[1;32m[a]\033[0m Add Connection  \033[1;33m[i]\033[0m Import from ~/.ssh/config  \033[1;31m[q]\033[0m Quit")
+        try:
+            choice = input("\nSelect option: ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            return "quit", None
+        if choice == 'a':
+            return "add", None
+        elif choice == 'i':
+            return "import", None
+        else:
+            return "quit", None
+        
+    while True:
+        clear_term()
+        print("⚡ \033[1;36mSSH Manager - Select Connection\033[0m ⚡\n")
+        
+        # Get terminal size dynamically
+        try:
+            term_width = os.get_terminal_size().columns
+        except OSError:
+            term_width = 80
+            
+        # Get maximum lengths of content in columns
+        max_name_len = max([len(c.get('name', '')) for c in connections] + [10])
+        
+        def get_conn_str(c):
+            user_host = f"{c.get('user', '')}@{c.get('host', '')}"
+            if c.get("port") and c.get("port") != "22":
+                user_host += f":{c.get('port')}"
+            return user_host
+            
+        max_conn_len = max([len(get_conn_str(c)) for c in connections] + [15])
+        max_group_len = max([len(f"[{c.get('group', '')}]") if c.get('group') else 0 for c in connections] + [7])
+        
+        # Determine fixed columns and margins width:
+        # 2 (left margin) + 3 (#) + 1 (space) + 1 (space) + 1 (space) + max_group_len + 2 (right margin)
+        fixed_width = 10 + max_group_len
+        available_width = max(40, term_width - fixed_width)
+        
+        if max_name_len + max_conn_len <= available_width:
+            # Everything fits perfectly! Use max sizes.
+            col_name_width = max_name_len
+            col_conn_width = max_conn_len
+        else:
+            # Distribute width proportionally (45% name, 55% conn) with minimum guards
+            col_name_width = max(20, int(available_width * 0.45))
+            col_conn_width = max(25, int(available_width * 0.55))
+            
+            # Re-allocate unused width if one column is shorter than its proportion
+            if max_name_len < col_name_width:
+                diff = col_name_width - max_name_len
+                col_name_width = max_name_len
+                col_conn_width += diff
+            elif max_conn_len < col_conn_width:
+                diff = col_conn_width - max_conn_len
+                col_conn_width = max_conn_len
+                col_name_width += diff
+                
+        print(f"  \033[1;37m{'#':<3} {'NAME':<{col_name_width}} {'CONNECTION':<{col_conn_width}} {'GROUP'}\033[0m")
+        print("  " + "─" * (3 + 1 + col_name_width + 1 + col_conn_width + 1 + max_group_len))
+        
+        for idx, c in enumerate(connections):
+            user_host = get_conn_str(c)
+            name = c.get('name', '')
+            if len(name) > col_name_width:
+                name = name[:col_name_width - 3] + "..."
+                
+            display_conn = user_host
+            if len(display_conn) > col_conn_width:
+                display_conn = display_conn[:col_conn_width - 3] + "..."
+                
+            group = f"[{c.get('group')}]" if c.get("group") else ""
+            print(f"  \033[1;33m{idx + 1:<3}\033[0m {name:<{col_name_width}} {display_conn:<{col_conn_width}} {group}")
+            
+        print("\n  \033[1;32m[a]\033[0m Add  \033[1;36m[e <num>]\033[0m Edit  \033[1;31m[d <num>]\033[0m Delete  \033[1;33m[i]\033[0m Import Config  \033[1;37m[q]\033[0m Quit")
+        try:
+            choice = input("\nSelect option or connection number: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return "quit", None
+            
+        if not choice:
+            continue
+            
+        choice_lower = choice.lower()
+        if choice_lower == 'q':
+            return "quit", None
+        elif choice_lower == 'a':
+            return "add", None
+        elif choice_lower == 'i':
+            return "import", None
+        elif choice_lower.startswith('e'):
+            parts = choice.split()
+            if len(parts) > 1:
+                try:
+                    num = int(parts[1])
+                    if 1 <= num <= len(connections):
+                        return "edit", connections[num - 1]["id"]
+                except ValueError:
+                    pass
+            print("\n\033[1;31mInvalid format. Use 'e [number]' to edit (e.g., 'e 1').\033[0m")
+            time.sleep(1.5)
+        elif choice_lower.startswith('d'):
+            parts = choice.split()
+            if len(parts) > 1:
+                try:
+                    num = int(parts[1])
+                    if 1 <= num <= len(connections):
+                        return "delete", connections[num - 1]["id"]
+                except ValueError:
+                    pass
+            print("\n\033[1;31mInvalid format. Use 'd [number]' to delete (e.g., 'd 1').\033[0m")
+            time.sleep(1.5)
+        else:
+            try:
+                num = int(choice)
+                if 1 <= num <= len(connections):
+                    return "connect", connections[num - 1]["id"]
+            except ValueError:
+                pass
+            print("\n\033[1;31mInvalid selection.\033[0m")
+            time.sleep(1)
+
+def print_help():
+    print("""⚡ SSH Manager (sshm) ⚡
+
+Usage:
+  sshm              Start the interactive connection manager
+  sshm -h, --help   Show this help message
+""")
+
+def main():
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print_help()
+        sys.exit(0)
+        
+    init_db()
+    
+    conns = load_connections()
+    if not conns:
+        scan_ssh_config()
+        
+    while True:
+        action, conn_id = run_ui()
+                
+        if action == "connect":
+            connect_ssh(conn_id)
+            break
+        elif action == "add":
+            add_connection_prompt()
+        elif action == "edit":
+            edit_connection_prompt(conn_id)
+        elif action == "delete":
+            delete_connection(conn_id)
+        elif action == "import":
+            import_config_prompt()
+        elif action == "quit":
+            clear_term()
+            print("Goodbye!")
+            break
+
+if __name__ == "__main__":
+    main()
